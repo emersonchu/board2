@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>百條留言板</title>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            width: 100%;
+            max-width: 600px;
+            background: var(--card-bg);
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 90vh; /* 固定高度讓內容可捲動 */
+        }
+        h2 { text-align: center; color: #333; margin-top: 0; }
+       
+        /* 留言列表區域 */
+        #message-list {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 20px;
+            background-color: #fafafa;
+        }
+        .message-item {
+            background: #fff;
+            border-bottom: 1px solid #eee;
+            padding: 10px;
+            display: flex;
+            align-items: flex-start;
+        }
+        .message-item:last-child { border-bottom: none; }
+       
+        .msg-id {
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-right: 10px;
+            min-width: 50px;
+        }
+        .msg-content {
+            flex: 1;
+            word-wrap: break-word;
+            color: #444;
+        }
+        .msg-time {
+            font-size: 0.8em;
+            color: #999;
+            margin-left: 10px;
+        }
+        /* 輸入區域 */
+        .input-area {
+            display: flex;
+            gap: 10px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #357abd; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>留言板 (#001~#100)</h2>
+   
+    <div id="message-list">
+        <div style="text-align:center; color:#999; margin-top:20px;">載入中...</div>
+    </div>
+    <div class="input-area">
+        <input type="text" id="msg-input" placeholder="輸入留言內容..." maxlength="200">
+        <button id="send-btn" onclick="postMessage()">送出</button>
+    </div>
+</div>
+<script>
+    // ★ 如果你在本地測試，請保留此網址
+    // ★ 如果部署到 Render/Zeabur，請改成你的後端網址，例如 "https://my-app.onrender.com"
+    const API_BASE_URL = "http://127.0.0.1:8000";
+    // 頁面載入時取得留言
+    window.onload = fetchMessages;
+    // 1. 取得歷史留言 (HTTP GET)
+    async function fetchMessages() {
+        const listDiv = document.getElementById('message-list');
+        try {
+            const response = await fetch(`${API_BASE_URL}/messages`);
+            if (!response.ok) throw new Error("網路回應錯誤");
+           
+            const messages = await response.json();
+            renderMessages(messages);
+        } catch (error) {
+            console.error("Error:", error);
+            listDiv.innerHTML = `<div style="text-align:center; color:red;">無法載入留言<br>請確認後端伺服器已啟動</div>`;
+        }
+    }
+    // 2. 渲染留言到畫面上
+    function renderMessages(messages) {
+        const listDiv = document.getElementById('message-list');
+        listDiv.innerHTML = ""; // 清空目前內容
+        if (messages.length === 0) {
+            listDiv.innerHTML = `<div style="text-align:center; color:#999; margin-top:20px;">目前尚無留言</div>`;
+            return;
+        }
+        messages.forEach(msg => {
+            const item = document.createElement('div');
+            item.className = 'message-item';
+           
+            // 簡單處理時間顯示
+            const timeStr = new Date(msg.created_at).toLocaleString();
+            item.innerHTML = `
+                <span class="msg-id">${msg.display_id}</span>
+                <span class="msg-content">${escapeHtml(msg.content)}</span>
+                <span class="msg-time">${timeStr}</span>
+            `;
+            listDiv.appendChild(item);
+        });
+        // 自動捲動到底部
+        listDiv.scrollTop = listDiv.scrollHeight;
+    }
+    // 3. 發送新留言 (HTTP POST)
+    async function postMessage() {
+        const input = document.getElementById('msg-input');
+        const btn = document.getElementById('send-btn');
+        const content = input.value.trim();
+        if (!content) return;
+        // 鎖定按鈕避免重複發送
+        btn.disabled = true;
+        btn.innerText = "傳送中...";
+        try {
+            const response = await fetch(`${API_BASE_URL}/messages`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ content: content })
+            });
+            if (response.ok) {
+                input.value = ""; // 清空輸入框
+                await fetchMessages(); // 重新載入列表
+            } else {
+                alert("發送失敗");
+            }
+        } catch (error) {
+            console.error("Error:", error);
+            alert("發送錯誤");
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "送出";
+            input.focus();
+        }
+    }
+    // 防止 XSS 攻擊的簡單處理
+    function escapeHtml(text) {
+        if (!text) return text;
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+    // 允許按 Enter 發送
+    document.getElementById("msg-input").addEventListener("keypress", function(event) {
+        if (event.key === "Enter") {
+            postMessage();
+        }
+    });
+</script>
+</body>
+</html>
+
